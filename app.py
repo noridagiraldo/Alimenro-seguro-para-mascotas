@@ -1,0 +1,81 @@
+import streamlit as st
+from google import genai
+from PIL import Image
+import os
+
+# Configuración de la página
+st.set_page_config(
+    page_title="SafePet - Analizador de Comida para Gatos",
+    page_icon="🐱",
+    layout="centered"
+)
+
+st.title("🐱 SafePet: Analizador de Alimentos")
+st.subheader("Escanea la lista de ingredientes de la comida de tu gato")
+
+# Inicialización del cliente de Gemini
+# Nota: La API Key debe configurarse en los Secrets de Streamlit o como variable de entorno GEMINI_API_KEY
+api_key = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", None)
+
+if not api_key:
+    st.warning("⚠️ No se encontró la API Key de Gemini. Por favor configúrala en tus variables de entorno.")
+
+# Opciones de captura
+opcion_imagen = st.radio(
+    "Selecciona cómo cargar la imagen:",
+    ("Usar Cámara", "Subir Imagen desde la Galería"),
+    horizontal=True
+)
+
+imagen_cargada = None
+
+if opcion_imagen == "Usar Cámara":
+    imagen_cargada = st.camera_input("Toma una foto clara a la tabla de ingredientes")
+else:
+    imagen_cargada = st.file_uploader("Sube una foto de los ingredientes", type=["jpg", "jpeg", "png"])
+
+# Botón para iniciar el análisis
+if imagen_cargada is not None:
+    # Mostrar la foto seleccionada
+    image = Image.open(imagen_cargada)
+    
+    st.markdown("---")
+    if st.button("🔍 Analizar Ingredientes", type="primary", use_container_width=True):
+        if not api_key:
+            st.error("Error: Falta la API Key de Google Gemini.")
+        else:
+            with st.spinner("Analizando componentes y valor nutricional para felinos..."):
+                try:
+                    # Crear el cliente de Gemini
+                    client = genai.Client(api_key=api_key)
+                    
+                    # Prompt especializado en nutrición felina
+                    prompt = """
+                    Eres un experto nutricionista veterinario especializado en felinos. 
+                    Analiza la imagen adjunta, que contiene la tabla de ingredientes de un alimento para gatos.
+
+                    Proporciona un reporte claro y estructurado con el siguiente formato:
+
+                    1. **Calificación General**: (Asigna un puntaje de 1 a 10 y una categoría: Excelente, Bueno, Aceptable o No Recomendado).
+                    2. **Resumen Rápido**: 2 oraciones explicando si es apto o no para gatos.
+                    3. **Ingredientes Principales (Primeros 5)**: Analiza las primeras fuentes de proteína y carbohidratos.
+                    4. **Puntos Positivos (Pros)**: Listado de ingredientes de buena calidad (ej. carnes específicas, taurina, sin subproductos de baja calidad).
+                    5. **Ingredientes de Riesgo o Alerta (Contras)**: Identifica granos excesivos (maíz, trigo, soya), colorantes artificiales, conservantes químicos (BHA/BHT), o carnes no especificadas.
+                    6. **Veredicto Final**: Recomendación clara para el dueño de la mascota.
+                    
+                    Mantén un tono empático, profesional y fácil de entender. Respuesta completamente en español.
+                    """
+
+                    # Llamada al modelo con la imagen
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=[image, prompt]
+                    )
+
+                    # Mostrar el resultado
+                    st.success("¡Análisis completado!")
+                    st.markdown("---")
+                    st.markdown(response.text)
+
+                except Exception as e:
+                    st.error(f"Ocurrió un error al procesar la imagen: {str(e)}")
